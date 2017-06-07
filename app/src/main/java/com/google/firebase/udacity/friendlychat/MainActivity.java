@@ -131,6 +131,11 @@ public class MainActivity extends AppCompatActivity {
                 mMessageEditText.setText("");
             }
         });
+
+
+    }
+
+    private void attachReadListener() {
         mChildEventListener=new ChildEventListener() {
             @Override
             public void onChildAdded(DataSnapshot dataSnapshot, String s) {
@@ -170,8 +175,11 @@ public class MainActivity extends AppCompatActivity {
             public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
                 FirebaseUser user = firebaseAuth.getCurrentUser();
                 if(null != user){
+                    attachReadListener();
+                    mUsername = user.getDisplayName();
                     Toast.makeText(MainActivity.this,"logged in user"+user.getDisplayName(),Toast.LENGTH_SHORT).show();
                 }else{
+                    cleanUp();
                     startActivityForResult(
                             AuthUI.getInstance()
                                     .createSignInIntentBuilder()
@@ -184,6 +192,19 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         };
+    }
+
+    private void cleanUp() {
+        mUsername = ANONYMOUS;
+        mMessageAdapter.clear();
+        detachReadListener();
+    }
+
+    private void detachReadListener() {
+        if(null != mChildEventListener){
+            mDatabaseReference.removeEventListener(mChildEventListener);
+            mChildEventListener = null;
+        }
     }
 
     @Override
@@ -208,5 +229,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         firebaseAuth.removeAuthStateListener(authStateListener);
         super.onPause();
+        detachReadListener();
+        mMessageAdapter.clear();
     }
 }
