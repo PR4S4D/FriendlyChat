@@ -15,6 +15,7 @@
  */
 package com.google.firebase.udacity.friendlychat;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
@@ -35,6 +36,7 @@ import android.widget.Toast;
 import com.firebase.ui.auth.AuthUI;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.auth.UserInfo;
 import com.google.firebase.database.ChildEventListener;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
@@ -74,8 +76,10 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         mUsername = ANONYMOUS;
+        mFirebaseDatabase = FirebaseDatabase.getInstance();
+        mDatabaseReference = mFirebaseDatabase.getReference().child(MESSAGES);
+        firebaseAuth = FirebaseAuth.getInstance();
 
-        setupFirebase();
         // Initialize references to views
         mProgressBar = (ProgressBar) findViewById(R.id.progressBar);
         mMessageListView = (ListView) findViewById(R.id.messageListView);
@@ -86,6 +90,7 @@ public class MainActivity extends AppCompatActivity {
         // Initialize message ListView and its adapter
         List<FriendlyMessage> friendlyMessages = new ArrayList<>();
         mMessageAdapter = new MessageAdapter(this, R.layout.item_message, friendlyMessages);
+
         mMessageListView.setAdapter(mMessageAdapter);
 
         // Initialize progress bar
@@ -125,60 +130,57 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
                 // TODO: Send messages on click
-                FriendlyMessage message = new FriendlyMessage(mMessageEditText.getText().toString(),mUsername,null);
+                FriendlyMessage message = new FriendlyMessage(mMessageEditText.getText().toString(), mUsername, null);
                 mDatabaseReference.push().setValue(message);
                 // Clear input box
                 mMessageEditText.setText("");
             }
         });
 
-
+        setupFirebase();
     }
 
     private void attachReadListener() {
-        mChildEventListener=new ChildEventListener() {
-            @Override
-            public void onChildAdded(DataSnapshot dataSnapshot, String s) {
-               FriendlyMessage message =  dataSnapshot.getValue(FriendlyMessage.class);
-                mMessageAdapter.add(message);
-            }
+        if (mChildEventListener == null) {
+            mChildEventListener = new ChildEventListener() {
+                @Override
+                public void onChildAdded(DataSnapshot dataSnapshot, String s) {
+                    FriendlyMessage friendlyMessage = dataSnapshot.getValue(FriendlyMessage.class);
+                    mMessageAdapter.add(friendlyMessage);
+                }
 
-            @Override
-            public void onChildChanged(DataSnapshot dataSnapshot, String s) {
+                public void onChildChanged(DataSnapshot dataSnapshot, String s) {
+                    FriendlyMessage friendlyMessage = dataSnapshot.getValue(FriendlyMessage.class);
+                    mMessageAdapter.add(friendlyMessage);
+                }
 
-            }
+                public void onChildRemoved(DataSnapshot dataSnapshot) {
+                }
 
-            @Override
-            public void onChildRemoved(DataSnapshot dataSnapshot) {
+                public void onChildMoved(DataSnapshot dataSnapshot, String s) {
+                }
 
-            }
-
-            @Override
-            public void onChildMoved(DataSnapshot dataSnapshot, String s) {
-
-            }
-
-            @Override
-            public void onCancelled(DatabaseError databaseError) {
-
-            }
-        };
-        mDatabaseReference.addChildEventListener(mChildEventListener);
+                public void onCancelled(DatabaseError databaseError) {
+                }
+            };
+            mDatabaseReference.addChildEventListener(mChildEventListener);
+        }
     }
 
     private void setupFirebase() {
-        mFirebaseDatabase = FirebaseDatabase.getInstance();
-        mDatabaseReference = mFirebaseDatabase.getReference().child(MESSAGES);
-        firebaseAuth = FirebaseAuth.getInstance();
+
         authStateListener = new FirebaseAuth.AuthStateListener() {
             @Override
             public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
                 FirebaseUser user = firebaseAuth.getCurrentUser();
-                if(null != user){
+                if (null != user) {
                     attachReadListener();
-                    mUsername = user.getDisplayName();
-                    Toast.makeText(MainActivity.this,"logged in user"+user.getDisplayName(),Toast.LENGTH_SHORT).show();
-                }else{
+                    for (UserInfo profile : user.getProviderData()) {
+                        if (null != profile)
+                            mUsername = profile.getDisplayName();
+                    }
+                    Toast.makeText(MainActivity.this, "logged in user" + mUsername, Toast.LENGTH_SHORT).show();
+                } else {
                     cleanUp();
                     startActivityForResult(
                             AuthUI.getInstance()
@@ -201,7 +203,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void detachReadListener() {
-        if(null != mChildEventListener){
+        if (null != mChildEventListener) {
             mDatabaseReference.removeEventListener(mChildEventListener);
             mChildEventListener = null;
         }
@@ -216,6 +218,10 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.sign_out_menu) {
+            AuthUI.getInstance().signOut(this);
+            return true;
+        }
         return super.onOptionsItemSelected(item);
     }
 
@@ -231,5 +237,18 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
         detachReadListener();
         mMessageAdapter.clear();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == RC_SIGN_IN) {
+            if (resultCode == RESULT_OK) {
+                Toast.makeText(this, "Signed in!", Toast.LENGTH_SHORT).show();
+            } else if (RESULT_CANCELED == resultCode) {
+                Toast.makeText(this, "Signing in cancelled!", Toast.LENGTH_SHORT).show();
+                finish();
+            }
+        }
     }
 }
